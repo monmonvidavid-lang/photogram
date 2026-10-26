@@ -19,3 +19,198 @@
   #publier input[type=text] { width:100%; box-sizing:border-box; padding:10px; margin:8px 0; }
   #publier button { padding:10px 14px; }
   .post { background:#fff; max-width:500px; margin:12px auto;
+          border:1px solid #ddd; border-radius:8px; overflow:hidden; }
+  .user { padding:10px; font-weight:bold; }
+  .post img { width:100%; display:block; }
+  .actions { padding:10px 10px 4px; font-size:24px; }
+  .coeur { cursor:pointer; }
+  .nblikes { font-size:14px; font-weight:bold; margin-left:6px; }
+  .legende, .com { padding:2px 10px; font-size:14px; }
+  .nouveau { display:flex; gap:6px; padding:8px 10px 12px; }
+  .nouveau input { flex:1; padding:8px; }
+</style>
+</head>
+<body>
+
+<div id="auth">
+  <h2>Photogram</h2>
+  <input id="email" type="email" placeholder="Email">
+  <input id="mdp" type="password" placeholder="Mot de passe (6 caractères min.)">
+  <div>
+    <button id="btnInscrire">S'inscrire</button>
+    <button id="btnConnecter">Se connecter</button>
+  </div>
+  <p id="msg"></p>
+</div>
+
+<div id="app" style="display:none">
+  <header>Photogram <button id="btnQuitter">Quitter</button></header>
+
+  <div id="publier">
+    <b>Publier une photo</b>
+    <input id="photo" type="file" accept="image/*">
+    <input id="legende" type="text" placeholder="Écris une légende...">
+    <button id="btnPublier">Publier</button>
+    <span id="etat"></span>
+  </div>
+
+  <div id="fil"></div>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/13.1.0/firebase-app.js";
+import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword,
+         signOut, onAuthStateChanged }
+  from "https://www.gstatic.com/firebasejs/13.1.0/firebase-auth.js";
+import { getFirestore, collection, addDoc, query, orderBy, onSnapshot,
+         serverTimestamp, doc, updateDoc, arrayUnion, arrayRemove }
+  from "https://www.gstatic.com/firebasejs/13.1.0/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyB3fKtSOEQb7RbFQaOShAQ2__hjuWCsHVU",
+  authDomain: "photogram-98606.firebaseapp.com",
+  projectId: "photogram-98606",
+  storageBucket: "photogram-98606.firebasestorage.app",
+  messagingSenderId: "402209948551",
+  appId: "1:402209948551:web:7330d1625695eee2e50922"
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const $ = id => document.getElementById(id);
+let arreterFil = null;
+
+$("btnInscrire").onclick = () =>
+  createUserWithEmailAndPassword(auth, $("email").value, $("mdp").value)
+    .catch(e => $("msg").textContent = e.code);
+
+$("btnConnecter").onclick = () =>
+  signInWithEmailAndPassword(auth, $("email").value, $("mdp").value)
+    .catch(e => $("msg").textContent = e.code);
+
+$("btnQuitter").onclick = () => signOut(auth);
+
+onAuthStateChanged(auth, user => {
+  $("auth").style.display = user ? "none" : "block";
+  $("app").style.display = user ? "block" : "none";
+  if (arreterFil) { arreterFil(); arreterFil = null; }
+  if (user) afficherFil();
+});
+
+function reduirePhoto(fichier) {
+  return new Promise((ok, erreur) => {
+    const lecteur = new FileReader();
+    lecteur.onerror = erreur;
+    lecteur.onload = () => {
+      const img = new Image();
+      img.onerror = erreur;
+      img.onload = () => {
+        const max = 600;
+        const echelle = Math.min(1, max / Math.max(img.width, img.height));
+        const c = document.createElement("canvas");
+        c.width = img.width * echelle;
+        c.height = img.height * echelle;
+        c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+        ok(c.toDataURL("image/jpeg", 0.6));
+      };
+      img.src = lecteur.result;
+    };
+    lecteur.readAsDataURL(fichier);
+  });
+}
+
+$("btnPublier").onclick = async () => {
+  const fichier = $("photo").files[0];
+  if (!fichier) { $("etat").textContent = "Choisis une photo d'abord"; return; }
+  $("etat").textContent = "Publication...";
+  try {
+    const img = await reduirePhoto(fichier);
+    await addDoc(collection(db, "posts"), {
+      user: auth.currentUser.email.split("@")[0],
+      texte: $("legende").value,
+      img: img,
+      likes: [],
+      commentaires: [],
+      date: serverTimestamp()
+    });
+    $("photo").value = "";
+    $("legende").value = "";
+    $("etat").textContent = "Publié ✅";
+  } catch (e) {
+    $("etat").textContent = "Erreur : " + e.code;
+  }
+};
+
+function afficherFil() {
+  const q = query(collection(db, "posts"), orderBy("date", "desc"));
+  arreterFil = onSnapshot(q, snap => {
+    $("fil").innerHTML = "";
+    const uid = auth.currentUser.uid;
+    const moi = auth.currentUser.email.split("@")[0];
+
+    snap.forEach(d => {
+      const p = d.data();
+      const ref = doc(db, "posts", d.id);
+      const likes = p.likes || [];
+      const aime = likes.includes(uid);
+
+      const div = document.createElement("div");
+      div.className = "post";
+
+      const u = document.createElement("div");
+      u.className = "user";
+      u.textContent = p.user;
+
+      const im = document.createElement("img");
+      im.src = p.img;
+
+      const a = document.createElement("div");
+      a.className = "actions";
+      const coeur = document.createElement("span");
+      coeur.className = "coeur";
+      coeur.textContent = aime ? "❤️" : "🤍";
+      coeur.onclick = () =>
+        updateDoc(ref, { likes: aime ? arrayRemove(uid) : arrayUnion(uid) });
+      const nb = document.createElement("span");
+      nb.className = "nblikes";
+      nb.textContent = likes.length + " j'aime";
+      a.append(coeur, nb);
+
+      const l = document.createElement("div");
+      l.className = "legende";
+      l.textContent = p.user + " " + (p.texte || "");
+
+      div.append(u, im, a, l);
+
+      (p.commentaires || []).forEach(c => {
+        const ligne = document.createElement("div");
+        ligne.className = "com";
+        const nom = document.createElement("b");
+        nom.textContent = c.user + " ";
+        ligne.append(nom, document.createTextNode(c.texte));
+        div.append(ligne);
+      });
+
+      const nouveau = document.createElement("div");
+      nouveau.className = "nouveau";
+      const champ = document.createElement("input");
+      champ.type = "text";
+      champ.placeholder = "Ajouter un commentaire...";
+      const bouton = document.createElement("button");
+      bouton.textContent = "Envoyer";
+      bouton.onclick = () => {
+        const t = champ.value.trim();
+        if (!t) return;
+        updateDoc(ref, { commentaires: arrayUnion({ user: moi, texte: t }) });
+      };
+      nouveau.append(champ, bouton);
+      div.append(nouveau);
+
+      $("fil").append(div);
+    });
+  });
+}
+</script>
+</body>
+</html>
