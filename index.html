@@ -5,54 +5,76 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Photogram</title>
 <style>
-  body { margin:0; font-family:Arial,sans-serif; background:#fafafa; }
-  header { background:#fff; padding:12px; text-align:center; font-size:22px;
-           font-weight:bold; border-bottom:1px solid #ddd; position:sticky; top:0; z-index:5; }
-  header button { position:absolute; right:10px; top:10px; font-size:13px; }
-  #auth { max-width:320px; margin:40px auto; padding:20px; background:#fff;
-          border:1px solid #ddd; border-radius:8px; text-align:center; }
-  #auth input { width:100%; box-sizing:border-box; padding:10px; margin:6px 0; }
-  #auth button { padding:10px 14px; margin:6px 3px; }
-  #msg { color:#c00; font-size:14px; }
-  #publier { max-width:500px; margin:12px auto; padding:12px; background:#fff;
-             border:1px solid #ddd; border-radius:8px; box-sizing:border-box; }
-  #publier input[type=text] { width:100%; box-sizing:border-box; padding:10px; margin:8px 0; }
-  #publier button { padding:10px 14px; }
-  .post { background:#fff; max-width:500px; margin:12px auto;
-          border:1px solid #ddd; border-radius:8px; overflow:hidden; }
-  .user { padding:10px; font-weight:bold; }
-  .post img { width:100%; display:block; }
-  .actions { padding:10px 10px 4px; font-size:24px; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:Arial,sans-serif; background:#fafafa; color:#262626; }
+  .logo { font-family:"Brush Script MT","Segoe Script",cursive; font-size:30px;
+          background:linear-gradient(45deg,#f09433,#dc2743,#bc1888);
+          -webkit-background-clip:text; background-clip:text;
+          -webkit-text-fill-color:transparent; color:transparent; }
+  header { background:#fff; padding:8px 12px; text-align:center;
+           border-bottom:1px solid #dbdbdb; position:sticky; top:0; z-index:5; }
+  header .logo { font-size:28px; }
+  header button { position:absolute; right:10px; top:14px; background:none; border:none;
+                  color:#0095f6; font-weight:bold; font-size:14px; cursor:pointer; }
+
+  #auth { max-width:340px; margin:40px auto; padding:28px 22px; background:#fff;
+          border:1px solid #dbdbdb; border-radius:10px; text-align:center; }
+  #auth .logo { font-size:44px; margin:0 0 16px; }
+  #auth input { width:100%; padding:11px; margin:5px 0; background:#fafafa;
+                border:1px solid #dbdbdb; border-radius:6px; font-size:14px; }
+  .btn { background:#0095f6; color:#fff; border:none; border-radius:8px;
+         padding:10px 16px; font-weight:bold; font-size:14px; cursor:pointer; }
+  .btn.gris { background:#efefef; color:#262626; }
+  #auth .btn { width:100%; margin:6px 0 0; }
+  #msg { color:#ed4956; font-size:13px; min-height:18px; }
+
+  #publier { max-width:500px; margin:14px auto; padding:14px; background:#fff;
+             border:1px solid #dbdbdb; border-radius:10px; }
+  #publier input[type=text] { width:100%; padding:10px; margin:10px 0;
+             border:1px solid #dbdbdb; border-radius:6px; font-size:14px; }
+  #photo { display:none; }
+  .fichier { display:inline-block; padding:10px 14px; border-radius:8px;
+             background:#efefef; font-weight:bold; font-size:14px; cursor:pointer; }
+  #etat { font-size:13px; margin-left:8px; }
+
+  .post { background:#fff; max-width:500px; margin:14px auto;
+          border:1px solid #dbdbdb; border-radius:10px; overflow:hidden; }
+  .entete { display:flex; align-items:center; gap:10px; padding:10px 12px; }
+  .avatar { width:34px; height:34px; border-radius:50%; color:#fff; font-weight:bold;
+            display:flex; align-items:center; justify-content:center;
+            background:linear-gradient(45deg,#f09433,#dc2743,#bc1888); }
+  .nom { font-weight:bold; font-size:14px; }
+  .post img { width:100%; display:block; background:#efefef; }
+  .actions { padding:10px 12px 4px; font-size:26px; }
   .coeur { cursor:pointer; }
-  .nblikes { font-size:14px; font-weight:bold; margin-left:6px; }
-  .legende, .com { padding:2px 10px; font-size:14px; }
-  .nouveau { display:flex; gap:6px; padding:8px 10px 12px; }
-  .nouveau input { flex:1; padding:8px; }
+  .nblikes { font-size:14px; font-weight:bold; margin-left:8px; }
+  .legende, .com { padding:2px 12px; font-size:14px; line-height:1.4; }
+  .nouveau { display:flex; gap:8px; padding:10px 12px 12px; border-top:1px solid #efefef; margin-top:8px; }
+  .nouveau input { flex:1; padding:9px; border:1px solid #dbdbdb; border-radius:6px; }
+  .nouveau button { background:none; border:none; color:#0095f6; font-weight:bold; cursor:pointer; }
 </style>
 </head>
 <body>
 
 <div id="auth">
-  <h2>Photogram</h2>
+  <div class="logo">Photogram</div>
   <input id="pseudo" type="text" placeholder="Pseudo (seulement pour s'inscrire)">
   <input id="email" type="email" placeholder="Email">
   <input id="mdp" type="password" placeholder="Mot de passe (6 caractères min.)">
-  <div>
-    <button id="btnInscrire">S'inscrire</button>
-    <button id="btnConnecter">Se connecter</button>
-  </div>
+  <button class="btn" id="btnConnecter">Se connecter</button>
+  <button class="btn gris" id="btnInscrire">S'inscrire</button>
   <p id="msg"></p>
 </div>
 
 <div id="app" style="display:none">
-  <header>Photogram <button id="btnQuitter">Quitter</button></header>
+  <header><span class="logo">Photogram</span> <button id="btnQuitter">Quitter</button></header>
 
   <div id="publier">
-    <b>Publier une photo</b>
+    <label class="fichier" for="photo">📷 Choisir une photo</label>
     <input id="photo" type="file" accept="image/*">
-    <input id="legende" type="text" placeholder="Écris une légende...">
-    <button id="btnPublier">Publier</button>
     <span id="etat"></span>
+    <input id="legende" type="text" placeholder="Écris une légende...">
+    <button class="btn" id="btnPublier">Publier</button>
   </div>
 
   <div id="fil"></div>
@@ -103,6 +125,10 @@ $("btnConnecter").onclick = () =>
     .catch(e => $("msg").textContent = e.code);
 
 $("btnQuitter").onclick = () => signOut(auth);
+
+$("photo").onchange = () => {
+  $("etat").textContent = $("photo").files[0] ? "Photo choisie ✅" : "";
+};
 
 onAuthStateChanged(auth, user => {
   $("auth").style.display = user ? "none" : "block";
@@ -170,9 +196,15 @@ function afficherFil() {
       const div = document.createElement("div");
       div.className = "post";
 
-      const u = document.createElement("div");
-      u.className = "user";
-      u.textContent = p.user;
+      const ent = document.createElement("div");
+      ent.className = "entete";
+      const av = document.createElement("div");
+      av.className = "avatar";
+      av.textContent = (p.user || "?").charAt(0).toUpperCase();
+      const nom = document.createElement("div");
+      nom.className = "nom";
+      nom.textContent = p.user;
+      ent.append(av, nom);
 
       const im = document.createElement("img");
       im.src = p.img;
@@ -191,16 +223,18 @@ function afficherFil() {
 
       const l = document.createElement("div");
       l.className = "legende";
-      l.textContent = p.user + " " + (p.texte || "");
+      const ln = document.createElement("b");
+      ln.textContent = p.user + " ";
+      l.append(ln, document.createTextNode(p.texte || ""));
 
-      div.append(u, im, a, l);
+      div.append(ent, im, a, l);
 
       (p.commentaires || []).forEach(c => {
         const ligne = document.createElement("div");
         ligne.className = "com";
-        const nom = document.createElement("b");
-        nom.textContent = c.user + " ";
-        ligne.append(nom, document.createTextNode(c.texte));
+        const cn = document.createElement("b");
+        cn.textContent = c.user + " ";
+        ligne.append(cn, document.createTextNode(c.texte));
         div.append(ligne);
       });
 
@@ -210,7 +244,7 @@ function afficherFil() {
       champ.type = "text";
       champ.placeholder = "Ajouter un commentaire...";
       const bouton = document.createElement("button");
-      bouton.textContent = "Envoyer";
+      bouton.textContent = "Publier";
       bouton.onclick = () => {
         const t = champ.value.trim();
         if (!t) return;
@@ -225,4 +259,4 @@ function afficherFil() {
 }
 </script>
 </body>
-</html>
+  </html>
