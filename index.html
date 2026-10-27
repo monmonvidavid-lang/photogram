@@ -13,9 +13,10 @@
           -webkit-text-fill-color:transparent; color:transparent; }
   header { background:#fff; padding:8px 12px; text-align:center;
            border-bottom:1px solid #dbdbdb; position:sticky; top:0; z-index:5; }
-  header .logo { font-size:28px; }
+  header .logo { font-size:28px; cursor:pointer; }
   header button { position:absolute; right:10px; top:14px; background:none; border:none;
                   color:#0095f6; font-weight:bold; font-size:14px; cursor:pointer; }
+  header button#btnProfil { left:10px; right:auto; }
 
   #auth { max-width:340px; margin:40px auto; padding:28px 22px; background:#fff;
           border:1px solid #dbdbdb; border-radius:10px; text-align:center; }
@@ -39,10 +40,11 @@
 
   .post { background:#fff; max-width:500px; margin:14px auto;
           border:1px solid #dbdbdb; border-radius:10px; overflow:hidden; }
-  .entete { display:flex; align-items:center; gap:10px; padding:10px 12px; }
+  .entete { display:flex; align-items:center; gap:10px; padding:10px 12px; cursor:pointer; }
   .avatar { width:34px; height:34px; border-radius:50%; color:#fff; font-weight:bold;
-            display:flex; align-items:center; justify-content:center;
+            display:flex; align-items:center; justify-content:center; flex-shrink:0;
             background:linear-gradient(45deg,#f09433,#dc2743,#bc1888); }
+  .avatar.grand { width:72px; height:72px; font-size:30px; }
   .nom { font-weight:bold; font-size:14px; }
   .post img { width:100%; display:block; background:#efefef; }
   .actions { padding:10px 12px 4px; font-size:26px; }
@@ -52,6 +54,19 @@
   .nouveau { display:flex; gap:8px; padding:10px 12px 12px; border-top:1px solid #efefef; margin-top:8px; }
   .nouveau input { flex:1; padding:9px; border:1px solid #dbdbdb; border-radius:6px; }
   .nouveau button { background:none; border:none; color:#0095f6; font-weight:bold; cursor:pointer; }
+
+  .retour { max-width:500px; margin:10px auto 0; padding:0 12px; }
+  .retour button { background:none; border:none; color:#0095f6; font-weight:bold;
+                   font-size:14px; cursor:pointer; padding:6px 0; }
+  .profil-tete { max-width:500px; margin:8px auto 14px; padding:16px; background:#fff;
+                 border:1px solid #dbdbdb; border-radius:10px;
+                 display:flex; align-items:center; gap:16px; }
+  .profil-nom { font-size:18px; font-weight:bold; }
+  .profil-nb { font-size:14px; color:#737373; margin-top:4px; }
+  .grille { max-width:500px; margin:0 auto 24px; display:grid;
+            grid-template-columns:repeat(3,1fr); gap:3px; }
+  .grille img { width:100%; aspect-ratio:1/1; object-fit:cover; display:block; background:#efefef; }
+  .vide { text-align:center; color:#737373; padding:30px; }
 </style>
 </head>
 <body>
@@ -67,7 +82,11 @@
 </div>
 
 <div id="app" style="display:none">
-  <header><span class="logo">Photogram</span> <button id="btnQuitter">Quitter</button></header>
+  <header>
+    <button id="btnProfil">Profil</button>
+    <span class="logo" id="logo">Photogram</span>
+    <button id="btnQuitter">Quitter</button>
+  </header>
 
   <div id="publier">
     <label class="fichier" for="photo">📷 Choisir une photo</label>
@@ -103,6 +122,8 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 const $ = id => document.getElementById(id);
 let arreterFil = null;
+let docs = [];
+let profilActuel = null;
 
 function nomUtilisateur() {
   const u = auth.currentUser;
@@ -126,6 +147,9 @@ $("btnConnecter").onclick = () =>
 
 $("btnQuitter").onclick = () => signOut(auth);
 
+$("btnProfil").onclick = () => ouvrirProfil(nomUtilisateur());
+$("logo").onclick = () => { profilActuel = null; rendre(); window.scrollTo(0, 0); };
+
 $("photo").onchange = () => {
   $("etat").textContent = $("photo").files[0] ? "Photo choisie ✅" : "";
 };
@@ -134,6 +158,8 @@ onAuthStateChanged(auth, user => {
   $("auth").style.display = user ? "none" : "block";
   $("app").style.display = user ? "block" : "none";
   if (arreterFil) { arreterFil(); arreterFil = null; }
+  profilActuel = null;
+  docs = [];
   if (user) afficherFil();
 });
 
@@ -184,79 +210,139 @@ $("btnPublier").onclick = async () => {
 function afficherFil() {
   const q = query(collection(db, "posts"), orderBy("date", "desc"));
   arreterFil = onSnapshot(q, snap => {
-    $("fil").innerHTML = "";
-    const uid = auth.currentUser.uid;
-
-    snap.forEach(d => {
-      const p = d.data();
-      const ref = doc(db, "posts", d.id);
-      const likes = p.likes || [];
-      const aime = likes.includes(uid);
-
-      const div = document.createElement("div");
-      div.className = "post";
-
-      const ent = document.createElement("div");
-      ent.className = "entete";
-      const av = document.createElement("div");
-      av.className = "avatar";
-      av.textContent = (p.user || "?").charAt(0).toUpperCase();
-      const nom = document.createElement("div");
-      nom.className = "nom";
-      nom.textContent = p.user;
-      ent.append(av, nom);
-
-      const im = document.createElement("img");
-      im.src = p.img;
-
-      const a = document.createElement("div");
-      a.className = "actions";
-      const coeur = document.createElement("span");
-      coeur.className = "coeur";
-      coeur.textContent = aime ? "❤️" : "🤍";
-      coeur.onclick = () =>
-        updateDoc(ref, { likes: aime ? arrayRemove(uid) : arrayUnion(uid) });
-      const nb = document.createElement("span");
-      nb.className = "nblikes";
-      nb.textContent = likes.length + " j'aime";
-      a.append(coeur, nb);
-
-      const l = document.createElement("div");
-      l.className = "legende";
-      const ln = document.createElement("b");
-      ln.textContent = p.user + " ";
-      l.append(ln, document.createTextNode(p.texte || ""));
-
-      div.append(ent, im, a, l);
-
-      (p.commentaires || []).forEach(c => {
-        const ligne = document.createElement("div");
-        ligne.className = "com";
-        const cn = document.createElement("b");
-        cn.textContent = c.user + " ";
-        ligne.append(cn, document.createTextNode(c.texte));
-        div.append(ligne);
-      });
-
-      const nouveau = document.createElement("div");
-      nouveau.className = "nouveau";
-      const champ = document.createElement("input");
-      champ.type = "text";
-      champ.placeholder = "Ajouter un commentaire...";
-      const bouton = document.createElement("button");
-      bouton.textContent = "Publier";
-      bouton.onclick = () => {
-        const t = champ.value.trim();
-        if (!t) return;
-        updateDoc(ref, { commentaires: arrayUnion({ user: nomUtilisateur(), texte: t }) });
-      };
-      nouveau.append(champ, bouton);
-      div.append(nouveau);
-
-      $("fil").append(div);
-    });
+    docs = snap.docs;
+    rendre();
   });
+}
+
+function ouvrirProfil(nom) {
+  profilActuel = nom;
+  rendre();
+  window.scrollTo(0, 0);
+}
+
+function rendre() {
+  $("fil").innerHTML = "";
+  $("publier").style.display = profilActuel ? "none" : "block";
+  if (profilActuel) { rendreProfil(); return; }
+  docs.forEach(d => $("fil").append(carte(d)));
+}
+
+function rendreProfil() {
+  const mes = docs.filter(d => d.data().user === profilActuel);
+
+  const retour = document.createElement("div");
+  retour.className = "retour";
+  const br = document.createElement("button");
+  br.textContent = "← Retour au fil";
+  br.onclick = () => { profilActuel = null; rendre(); };
+  retour.append(br);
+
+  const tete = document.createElement("div");
+  tete.className = "profil-tete";
+  const av = document.createElement("div");
+  av.className = "avatar grand";
+  av.textContent = profilActuel.charAt(0).toUpperCase();
+  const infos = document.createElement("div");
+  const nom = document.createElement("div");
+  nom.className = "profil-nom";
+  nom.textContent = profilActuel;
+  const nb = document.createElement("div");
+  nb.className = "profil-nb";
+  nb.textContent = mes.length + (mes.length > 1 ? " publications" : " publication");
+  infos.append(nom, nb);
+  tete.append(av, infos);
+
+  $("fil").append(retour, tete);
+
+  if (mes.length === 0) {
+    const v = document.createElement("div");
+    v.className = "vide";
+    v.textContent = "Aucune photo pour le moment";
+    $("fil").append(v);
+    return;
+  }
+
+  const grille = document.createElement("div");
+  grille.className = "grille";
+  mes.forEach(d => {
+    const im = document.createElement("img");
+    im.src = d.data().img;
+    grille.append(im);
+  });
+  $("fil").append(grille);
+}
+
+function carte(d) {
+  const uid = auth.currentUser.uid;
+  const p = d.data();
+  const ref = doc(db, "posts", d.id);
+  const likes = p.likes || [];
+  const aime = likes.includes(uid);
+
+  const div = document.createElement("div");
+  div.className = "post";
+
+  const ent = document.createElement("div");
+  ent.className = "entete";
+  ent.onclick = () => ouvrirProfil(p.user);
+  const av = document.createElement("div");
+  av.className = "avatar";
+  av.textContent = (p.user || "?").charAt(0).toUpperCase();
+  const nom = document.createElement("div");
+  nom.className = "nom";
+  nom.textContent = p.user;
+  ent.append(av, nom);
+
+  const im = document.createElement("img");
+  im.src = p.img;
+
+  const a = document.createElement("div");
+  a.className = "actions";
+  const coeur = document.createElement("span");
+  coeur.className = "coeur";
+  coeur.textContent = aime ? "❤️" : "🤍";
+  coeur.onclick = () =>
+    updateDoc(ref, { likes: aime ? arrayRemove(uid) : arrayUnion(uid) });
+  const nb = document.createElement("span");
+  nb.className = "nblikes";
+  nb.textContent = likes.length + " j'aime";
+  a.append(coeur, nb);
+
+  const l = document.createElement("div");
+  l.className = "legende";
+  const ln = document.createElement("b");
+  ln.textContent = p.user + " ";
+  l.append(ln, document.createTextNode(p.texte || ""));
+
+  div.append(ent, im, a, l);
+
+  (p.commentaires || []).forEach(c => {
+    const ligne = document.createElement("div");
+    ligne.className = "com";
+    const cn = document.createElement("b");
+    cn.textContent = c.user + " ";
+    ligne.append(cn, document.createTextNode(c.texte));
+    div.append(ligne);
+  });
+
+  const nouveau = document.createElement("div");
+  nouveau.className = "nouveau";
+  const champ = document.createElement("input");
+  champ.type = "text";
+  champ.placeholder = "Ajouter un commentaire...";
+  const bouton = document.createElement("button");
+  bouton.textContent = "Publier";
+  bouton.onclick = () => {
+    const t = champ.value.trim();
+    if (!t) return;
+    updateDoc(ref, { commentaires: arrayUnion({ user: nomUtilisateur(), texte: t }) });
+  };
+  nouveau.append(champ, bouton);
+  div.append(nouveau);
+
+  return div;
 }
 </script>
 </body>
-  </html>
+     </html>
