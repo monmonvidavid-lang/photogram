@@ -34,6 +34,7 @@
 
 <div id="auth">
   <h2>Photogram</h2>
+  <input id="pseudo" type="text" placeholder="Pseudo (seulement pour s'inscrire)">
   <input id="email" type="email" placeholder="Email">
   <input id="mdp" type="password" placeholder="Mot de passe (6 caractères min.)">
   <div>
@@ -60,7 +61,7 @@
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/13.1.0/firebase-app.js";
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword,
-         signOut, onAuthStateChanged }
+         signOut, onAuthStateChanged, updateProfile }
   from "https://www.gstatic.com/firebasejs/13.1.0/firebase-auth.js";
 import { getFirestore, collection, addDoc, query, orderBy, onSnapshot,
          serverTimestamp, doc, updateDoc, arrayUnion, arrayRemove }
@@ -81,9 +82,21 @@ const db = getFirestore(app);
 const $ = id => document.getElementById(id);
 let arreterFil = null;
 
-$("btnInscrire").onclick = () =>
-  createUserWithEmailAndPassword(auth, $("email").value, $("mdp").value)
-    .catch(e => $("msg").textContent = e.code);
+function nomUtilisateur() {
+  const u = auth.currentUser;
+  return u.displayName || u.email.split("@")[0];
+}
+
+$("btnInscrire").onclick = async () => {
+  const pseudo = $("pseudo").value.trim();
+  if (!pseudo) { $("msg").textContent = "Choisis un pseudo d'abord"; return; }
+  try {
+    const cred = await createUserWithEmailAndPassword(auth, $("email").value, $("mdp").value);
+    await updateProfile(cred.user, { displayName: pseudo });
+  } catch (e) {
+    $("msg").textContent = e.code;
+  }
+};
 
 $("btnConnecter").onclick = () =>
   signInWithEmailAndPassword(auth, $("email").value, $("mdp").value)
@@ -127,7 +140,7 @@ $("btnPublier").onclick = async () => {
   try {
     const img = await reduirePhoto(fichier);
     await addDoc(collection(db, "posts"), {
-      user: auth.currentUser.email.split("@")[0],
+      user: nomUtilisateur(),
       texte: $("legende").value,
       img: img,
       likes: [],
@@ -147,7 +160,6 @@ function afficherFil() {
   arreterFil = onSnapshot(q, snap => {
     $("fil").innerHTML = "";
     const uid = auth.currentUser.uid;
-    const moi = auth.currentUser.email.split("@")[0];
 
     snap.forEach(d => {
       const p = d.data();
@@ -202,7 +214,7 @@ function afficherFil() {
       bouton.onclick = () => {
         const t = champ.value.trim();
         if (!t) return;
-        updateDoc(ref, { commentaires: arrayUnion({ user: moi, texte: t }) });
+        updateDoc(ref, { commentaires: arrayUnion({ user: nomUtilisateur(), texte: t }) });
       };
       nouveau.append(champ, bouton);
       div.append(nouveau);
