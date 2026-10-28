@@ -47,6 +47,7 @@
   img.avatar { display:block; object-fit:cover; background:#efefef; }
   .avatar.grand { width:72px; height:72px; font-size:30px; }
   .nom { font-weight:bold; font-size:14px; }
+  .suppr { margin-left:auto; background:none; border:none; font-size:20px; cursor:pointer; padding:4px 6px; }
   .post img.photo { width:100%; display:block; background:#efefef; }
   .actions { padding:10px 12px 4px; font-size:26px; }
   .coeur { cursor:pointer; }
@@ -109,7 +110,7 @@ import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword,
          signOut, onAuthStateChanged, updateProfile }
   from "https://www.gstatic.com/firebasejs/13.1.0/firebase-auth.js";
 import { getFirestore, collection, addDoc, query, orderBy, onSnapshot,
-         serverTimestamp, doc, updateDoc, arrayUnion, arrayRemove, getDoc, setDoc }
+         serverTimestamp, doc, updateDoc, arrayUnion, arrayRemove, getDoc, setDoc, deleteDoc }
   from "https://www.gstatic.com/firebasejs/13.1.0/firebase-firestore.js";
 
 const firebaseConfig = {
@@ -222,7 +223,7 @@ function reduirePhoto(fichier) {
   });
 }
 
-// Photo de profil : carré recadré au centre, 200 x 200
+// Photo de profil : carré recadré au centre
 function reduireCarre(fichier, taille) {
   return new Promise((ok, erreur) => {
     const lecteur = new FileReader();
@@ -386,6 +387,7 @@ function carte(d) {
   const ref = doc(db, "posts", d.id);
   const likes = p.likes || [];
   const aime = likes.includes(uid);
+  const cestMoi = (p.user || "").toLowerCase() === nomUtilisateur().toLowerCase();
 
   const div = document.createElement("div");
   div.className = "post";
@@ -397,6 +399,22 @@ function carte(d) {
   nom.className = "nom";
   nom.textContent = p.user;
   ent.append(avatar(p.user, false), nom);
+
+  if (cestMoi) {
+    const sup = document.createElement("button");
+    sup.className = "suppr";
+    sup.textContent = "🗑️";
+    sup.onclick = async e => {
+      e.stopPropagation();
+      if (!confirm("Supprimer cette publication ?")) return;
+      try {
+        await deleteDoc(ref);
+      } catch (err) {
+        alert("Suppression impossible : " + err.code);
+      }
+    };
+    ent.append(sup);
+  }
 
   const im = document.createElement("img");
   im.className = "photo";
@@ -450,4 +468,4 @@ function carte(d) {
 }
 </script>
 </body>
- </html> 
+   </html>
