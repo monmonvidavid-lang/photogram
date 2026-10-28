@@ -44,9 +44,10 @@
   .avatar { width:34px; height:34px; border-radius:50%; color:#fff; font-weight:bold;
             display:flex; align-items:center; justify-content:center; flex-shrink:0;
             background:linear-gradient(45deg,#f09433,#dc2743,#bc1888); }
+  img.avatar { display:block; object-fit:cover; background:#efefef; }
   .avatar.grand { width:72px; height:72px; font-size:30px; }
   .nom { font-weight:bold; font-size:14px; }
-  .post img { width:100%; display:block; background:#efefef; }
+  .post img.photo { width:100%; display:block; background:#efefef; }
   .actions { padding:10px 12px 4px; font-size:26px; }
   .coeur { cursor:pointer; }
   .nblikes { font-size:14px; font-weight:bold; margin-left:8px; }
@@ -63,6 +64,9 @@
                  display:flex; align-items:center; gap:16px; }
   .profil-nom { font-size:18px; font-weight:bold; }
   .profil-nb { font-size:14px; color:#737373; margin-top:4px; }
+  .change { display:inline-block; margin-top:8px; padding:7px 12px; border-radius:8px;
+            background:#efefef; font-weight:bold; font-size:13px; cursor:pointer; }
+  .petit { font-size:12px; color:#737373; margin-left:6px; }
   .grille { max-width:500px; margin:0 auto 24px; display:grid;
             grid-template-columns:repeat(3,1fr); gap:3px; }
   .grille img { width:100%; aspect-ratio:1/1; object-fit:cover; display:block; background:#efefef; }
@@ -122,7 +126,9 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 const $ = id => document.getElementById(id);
 let arreterFil = null;
+let arreterProfils = null;
 let docs = [];
+let photos = {};
 let profilActuel = null;
 
 function nomUtilisateur() {
@@ -184,8 +190,10 @@ onAuthStateChanged(auth, user => {
   $("auth").style.display = user ? "none" : "block";
   $("app").style.display = user ? "block" : "none";
   if (arreterFil) { arreterFil(); arreterFil = null; }
+  if (arreterProfils) { arreterProfils(); arreterProfils = null; }
   profilActuel = null;
   docs = [];
+  photos = {};
   if (user) {
     afficherFil();
     reserver(user.displayName || user.email.split("@")[0]);
@@ -207,6 +215,30 @@ function reduirePhoto(fichier) {
         c.height = img.height * echelle;
         c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
         ok(c.toDataURL("image/jpeg", 0.6));
+      };
+      img.src = lecteur.result;
+    };
+    lecteur.readAsDataURL(fichier);
+  });
+}
+
+// Photo de profil : carré recadré au centre, 200 x 200
+function reduireCarre(fichier, taille) {
+  return new Promise((ok, erreur) => {
+    const lecteur = new FileReader();
+    lecteur.onerror = erreur;
+    lecteur.onload = () => {
+      const img = new Image();
+      img.onerror = erreur;
+      img.onload = () => {
+        const c = document.createElement("canvas");
+        c.width = taille;
+        c.height = taille;
+        const cote = Math.min(img.width, img.height);
+        const sx = (img.width - cote) / 2;
+        const sy = (img.height - cote) / 2;
+        c.getContext("2d").drawImage(img, sx, sy, cote, cote, 0, 0, taille, taille);
+        ok(c.toDataURL("image/jpeg", 0.7));
       };
       img.src = lecteur.result;
     };
@@ -242,12 +274,32 @@ function afficherFil() {
     docs = snap.docs;
     rendre();
   });
+  arreterProfils = onSnapshot(collection(db, "profils"), snap => {
+    photos = {};
+    snap.forEach(d => { photos[d.id] = d.data().img; });
+    rendre();
+  }, () => {});
 }
 
 function ouvrirProfil(nom) {
   profilActuel = nom;
   rendre();
   window.scrollTo(0, 0);
+}
+
+// Pastille ou photo de profil
+function avatar(nom, grand) {
+  const img = photos[(nom || "").toLowerCase()];
+  if (img && String(img).startsWith("data:image/")) {
+    const im = document.createElement("img");
+    im.className = "avatar" + (grand ? " grand" : "");
+    im.src = img;
+    return im;
+  }
+  const d = document.createElement("div");
+  d.className = "avatar" + (grand ? " grand" : "");
+  d.textContent = (nom || "?").charAt(0).toUpperCase();
+  return d;
 }
 
 function rendre() {
@@ -259,6 +311,7 @@ function rendre() {
 
 function rendreProfil() {
   const mes = docs.filter(d => d.data().user === profilActuel);
+  const cestMoi = profilActuel.toLowerCase() === nomUtilisateur().toLowerCase();
 
   const retour = document.createElement("div");
   retour.className = "retour";
@@ -269,9 +322,7 @@ function rendreProfil() {
 
   const tete = document.createElement("div");
   tete.className = "profil-tete";
-  const av = document.createElement("div");
-  av.className = "avatar grand";
-  av.textContent = profilActuel.charAt(0).toUpperCase();
+  const av = avatar(profilActuel, true);
   const infos = document.createElement("div");
   const nom = document.createElement("div");
   nom.className = "profil-nom";
@@ -280,8 +331,35 @@ function rendreProfil() {
   nb.className = "profil-nb";
   nb.textContent = mes.length + (mes.length > 1 ? " publications" : " publication");
   infos.append(nom, nb);
-  tete.append(av, infos);
 
+  if (cestMoi) {
+    const lab = document.createElement("label");
+    lab.className = "change";
+    lab.textContent = "📷 Changer ma photo";
+    const champ = document.createElement("input");
+    champ.type = "file";
+    champ.accept = "image/*";
+    champ.style.display = "none";
+    const info = document.createElement("span");
+    info.className = "petit";
+    champ.onchange = async () => {
+      const f = champ.files[0];
+      if (!f) return;
+      info.textContent = "Envoi...";
+      try {
+        const img = await reduireCarre(f, 200);
+        await setDoc(doc(db, "profils", nomUtilisateur().toLowerCase()),
+                     { uid: auth.currentUser.uid, img: img });
+        info.textContent = "";
+      } catch (e) {
+        info.textContent = "Erreur : " + (e.code || "photo invalide");
+      }
+    };
+    lab.append(champ);
+    infos.append(lab, info);
+  }
+
+  tete.append(av, infos);
   $("fil").append(retour, tete);
 
   if (mes.length === 0) {
@@ -315,15 +393,13 @@ function carte(d) {
   const ent = document.createElement("div");
   ent.className = "entete";
   ent.onclick = () => ouvrirProfil(p.user);
-  const av = document.createElement("div");
-  av.className = "avatar";
-  av.textContent = (p.user || "?").charAt(0).toUpperCase();
   const nom = document.createElement("div");
   nom.className = "nom";
   nom.textContent = p.user;
-  ent.append(av, nom);
+  ent.append(avatar(p.user, false), nom);
 
   const im = document.createElement("img");
+  im.className = "photo";
   im.src = p.img;
 
   const a = document.createElement("div");
@@ -374,4 +450,4 @@ function carte(d) {
 }
 </script>
 </body>
-</html>
+ </html> 
