@@ -47,6 +47,7 @@
   img.avatar { display:block; object-fit:cover; background:#efefef; }
   .avatar.grand { width:72px; height:72px; font-size:30px; }
   .nom { font-weight:bold; font-size:14px; }
+  .heure { font-size:12px; color:#737373; margin-top:2px; }
   .suppr { margin-left:auto; background:none; border:none; font-size:20px; cursor:pointer; padding:4px 6px; }
   .post img.photo { width:100%; display:block; background:#efefef; }
   .actions { padding:10px 12px 4px; font-size:26px; }
@@ -136,6 +137,26 @@ function nomUtilisateur() {
   const u = auth.currentUser;
   return u.displayName || u.email.split("@")[0];
 }
+
+// Temps écoulé depuis une publication
+function depuis(ms) {
+  const s = Math.floor((Date.now() - ms) / 1000);
+  if (s < 60) return "à l'instant";
+  const m = Math.floor(s / 60);
+  if (m < 60) return "il y a " + m + " min";
+  const h = Math.floor(m / 60);
+  if (h < 24) return "il y a " + h + " h";
+  const j = Math.floor(h / 24);
+  if (j < 7) return "il y a " + j + (j > 1 ? " jours" : " jour");
+  return new Date(ms).toLocaleDateString("fr-FR");
+}
+
+// Met à jour les heures toutes les 30 secondes
+setInterval(() => {
+  document.querySelectorAll(".heure").forEach(e => {
+    e.textContent = depuis(Number(e.dataset.ms));
+  });
+}, 30000);
 
 // Réserve le pseudo d'un ancien compte s'il est encore libre
 async function reserver(nom) {
@@ -388,6 +409,7 @@ function carte(d) {
   const likes = p.likes || [];
   const aime = likes.includes(uid);
   const cestMoi = (p.user || "").toLowerCase() === nomUtilisateur().toLowerCase();
+  const ms = p.date && p.date.toMillis ? p.date.toMillis() : Date.now();
 
   const div = document.createElement("div");
   div.className = "post";
@@ -395,10 +417,18 @@ function carte(d) {
   const ent = document.createElement("div");
   ent.className = "entete";
   ent.onclick = () => ouvrirProfil(p.user);
+
+  const colonne = document.createElement("div");
   const nom = document.createElement("div");
   nom.className = "nom";
   nom.textContent = p.user;
-  ent.append(avatar(p.user, false), nom);
+  const heure = document.createElement("div");
+  heure.className = "heure";
+  heure.dataset.ms = ms;
+  heure.textContent = depuis(ms);
+  colonne.append(nom, heure);
+
+  ent.append(avatar(p.user, false), colonne);
 
   if (cestMoi) {
     const sup = document.createElement("button");
@@ -468,4 +498,4 @@ function carte(d) {
 }
 </script>
 </body>
-   </html>
+ </html>
