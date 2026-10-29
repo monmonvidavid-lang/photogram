@@ -38,6 +38,11 @@
              background:#efefef; font-weight:bold; font-size:14px; cursor:pointer; }
   #etat { font-size:13px; margin-left:8px; }
 
+  #onglets { max-width:500px; margin:0 auto; padding:0 12px; display:flex; gap:8px; }
+  .ong { flex:1; padding:9px; border:none; border-radius:8px; background:#efefef;
+         font-weight:bold; font-size:14px; cursor:pointer; color:#262626; }
+  .ong.actif { background:#0095f6; color:#fff; }
+
   .post { background:#fff; max-width:500px; margin:14px auto;
           border:1px solid #dbdbdb; border-radius:10px; overflow:hidden; }
   .entete { display:flex; align-items:center; gap:10px; padding:10px 12px; cursor:pointer; }
@@ -65,14 +70,15 @@
                  border:1px solid #dbdbdb; border-radius:10px;
                  display:flex; align-items:center; gap:16px; }
   .profil-nom { font-size:18px; font-weight:bold; }
-  .profil-nb { font-size:14px; color:#737373; margin-top:4px; }
+  .profil-nb { font-size:13px; color:#737373; margin-top:4px; line-height:1.5; }
+  .profil-tete .btn { margin-top:8px; padding:8px 14px; }
   .change { display:inline-block; margin-top:8px; padding:7px 12px; border-radius:8px;
             background:#efefef; font-weight:bold; font-size:13px; cursor:pointer; }
   .petit { font-size:12px; color:#737373; margin-left:6px; }
   .grille { max-width:500px; margin:0 auto 24px; display:grid;
             grid-template-columns:repeat(3,1fr); gap:3px; }
   .grille img { width:100%; aspect-ratio:1/1; object-fit:cover; display:block; background:#efefef; }
-  .vide { text-align:center; color:#737373; padding:30px; }
+  .vide { text-align:center; color:#737373; padding:20px; font-size:14px; }
 </style>
 </head>
 <body>
@@ -102,6 +108,11 @@
     <button class="btn" id="btnPublier">Publier</button>
   </div>
 
+  <div id="onglets">
+    <button class="ong actif" id="ongTous">Tous</button>
+    <button class="ong" id="ongAbos">Abonnements</button>
+  </div>
+
   <div id="fil"></div>
 </div>
 
@@ -127,11 +138,12 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 const $ = id => document.getElementById(id);
-let arreterFil = null;
-let arreterProfils = null;
+let arrets = [];
 let docs = [];
 let photos = {};
+let suivis = {};
 let profilActuel = null;
+let onglet = "tous";
 
 function nomUtilisateur() {
   const u = auth.currentUser;
@@ -151,7 +163,6 @@ function depuis(ms) {
   return new Date(ms).toLocaleDateString("fr-FR");
 }
 
-// Met à jour les heures toutes les 30 secondes
 setInterval(() => {
   document.querySelectorAll(".heure").forEach(e => {
     e.textContent = depuis(Number(e.dataset.ms));
@@ -203,6 +214,8 @@ $("btnQuitter").onclick = () => signOut(auth);
 
 $("btnProfil").onclick = () => ouvrirProfil(nomUtilisateur());
 $("logo").onclick = () => { profilActuel = null; rendre(); window.scrollTo(0, 0); };
+$("ongTous").onclick = () => { onglet = "tous"; rendre(); };
+$("ongAbos").onclick = () => { onglet = "abos"; rendre(); };
 
 $("photo").onchange = () => {
   $("etat").textContent = $("photo").files[0] ? "Photo choisie ✅" : "";
@@ -211,11 +224,13 @@ $("photo").onchange = () => {
 onAuthStateChanged(auth, user => {
   $("auth").style.display = user ? "none" : "block";
   $("app").style.display = user ? "block" : "none";
-  if (arreterFil) { arreterFil(); arreterFil = null; }
-  if (arreterProfils) { arreterProfils(); arreterProfils = null; }
+  arrets.forEach(f => f());
+  arrets = [];
   profilActuel = null;
+  onglet = "tous";
   docs = [];
   photos = {};
+  suivis = {};
   if (user) {
     afficherFil();
     reserver(user.displayName || user.email.split("@")[0]);
@@ -292,15 +307,20 @@ $("btnPublier").onclick = async () => {
 
 function afficherFil() {
   const q = query(collection(db, "posts"), orderBy("date", "desc"));
-  arreterFil = onSnapshot(q, snap => {
+  arrets.push(onSnapshot(q, snap => {
     docs = snap.docs;
     rendre();
-  });
-  arreterProfils = onSnapshot(collection(db, "profils"), snap => {
+  }));
+  arrets.push(onSnapshot(collection(db, "profils"), snap => {
     photos = {};
     snap.forEach(d => { photos[d.id] = d.data().img; });
     rendre();
-  }, () => {});
+  }, () => {}));
+  arrets.push(onSnapshot(collection(db, "suivis"), snap => {
+    suivis = {};
+    snap.forEach(d => { suivis[d.id] = d.data().liste || []; });
+    rendre();
+  }, () => {}));
 }
 
 function ouvrirProfil(nom) {
@@ -324,16 +344,44 @@ function avatar(nom, grand) {
   return d;
 }
 
+function pluriel(n, mot) {
+  return n + " " + mot + (n > 1 ? "s" : "");
+}
+
 function rendre() {
   $("fil").innerHTML = "";
   $("publier").style.display = profilActuel ? "none" : "block";
+  $("onglets").style.display = profilActuel ? "none" : "flex";
+  $("ongTous").className = "ong" + (onglet === "tous" ? " actif" : "");
+  $("ongAbos").className = "ong" + (onglet === "abos" ? " actif" : "");
   if (profilActuel) { rendreProfil(); return; }
-  docs.forEach(d => $("fil").append(carte(d)));
+
+  let liste = docs;
+  if (onglet === "abos") {
+    const moi = nomUtilisateur().toLowerCase();
+    const mesAbos = suivis[moi] || [];
+    if (mesAbos.length === 0) {
+      const v = document.createElement("div");
+      v.className = "vide";
+      v.textContent = "Tu ne suis personne. Appuie sur le nom d'une personne, puis sur « S'abonner ».";
+      $("fil").append(v);
+    }
+    liste = docs.filter(d => {
+      const u = (d.data().user || "").toLowerCase();
+      return u === moi || mesAbos.includes(u);
+    });
+  }
+  liste.forEach(d => $("fil").append(carte(d)));
 }
 
 function rendreProfil() {
   const mes = docs.filter(d => d.data().user === profilActuel);
-  const cestMoi = profilActuel.toLowerCase() === nomUtilisateur().toLowerCase();
+  const moi = nomUtilisateur().toLowerCase();
+  const cle = profilActuel.toLowerCase();
+  const cestMoi = cle === moi;
+  const jeSuis = (suivis[moi] || []).includes(cle);
+  const abonnes = Object.keys(suivis).filter(k => suivis[k].includes(cle)).length;
+  const abonnements = (suivis[cle] || []).length;
 
   const retour = document.createElement("div");
   retour.className = "retour";
@@ -351,7 +399,9 @@ function rendreProfil() {
   nom.textContent = profilActuel;
   const nb = document.createElement("div");
   nb.className = "profil-nb";
-  nb.textContent = mes.length + (mes.length > 1 ? " publications" : " publication");
+  nb.textContent = pluriel(mes.length, "publication") + " · " +
+                   pluriel(abonnes, "abonné") + " · " +
+                   pluriel(abonnements, "abonnement");
   infos.append(nom, nb);
 
   if (cestMoi) {
@@ -370,8 +420,7 @@ function rendreProfil() {
       info.textContent = "Envoi...";
       try {
         const img = await reduireCarre(f, 200);
-        await setDoc(doc(db, "profils", nomUtilisateur().toLowerCase()),
-                     { uid: auth.currentUser.uid, img: img });
+        await setDoc(doc(db, "profils", moi), { uid: auth.currentUser.uid, img: img });
         info.textContent = "";
       } catch (e) {
         info.textContent = "Erreur : " + (e.code || "photo invalide");
@@ -379,6 +428,21 @@ function rendreProfil() {
     };
     lab.append(champ);
     infos.append(lab, info);
+  } else {
+    const bouton = document.createElement("button");
+    bouton.className = "btn" + (jeSuis ? " gris" : "");
+    bouton.textContent = jeSuis ? "Abonné ✓" : "S'abonner";
+    bouton.onclick = async () => {
+      try {
+        await setDoc(doc(db, "suivis", moi), {
+          uid: auth.currentUser.uid,
+          liste: jeSuis ? arrayRemove(cle) : arrayUnion(cle)
+        }, { merge: true });
+      } catch (e) {
+        alert("Erreur : " + (e.code || "impossible"));
+      }
+    };
+    infos.append(bouton);
   }
 
   tete.append(av, infos);
@@ -498,4 +562,4 @@ function carte(d) {
 }
 </script>
 </body>
- </html>
+     </html>
