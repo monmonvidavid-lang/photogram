@@ -48,6 +48,7 @@ try {
                 border:1px solid var(--bord); border-radius:6px; font-size:14px; }
   .btn { background:#0095f6; color:#fff; border:none; border-radius:8px;
          padding:10px 16px; font-weight:bold; font-size:14px; cursor:pointer; }
+  .btn:disabled { opacity:.5; cursor:default; }
   .btn.gris { background:var(--gris); color:var(--texte); }
   #auth .btn { width:100%; margin:6px 0 0; }
   #btnOublie { background:none; border:none; color:#0095f6; font-size:13px;
@@ -88,11 +89,12 @@ try {
   .nom { font-weight:bold; font-size:14px; }
   .heure { font-size:12px; color:var(--grisTexte); margin-top:2px; }
   .suppr { margin-left:auto; background:none; border:none; font-size:20px; cursor:pointer; padding:4px 6px; }
+  .signaler { font-size:16px; opacity:.7; }
   .post img.photo { width:100%; display:block; background:var(--gris); }
   .actions { padding:10px 12px 4px; font-size:26px; }
   .coeur { cursor:pointer; }
   .nblikes { font-size:14px; font-weight:bold; margin-left:8px; cursor:pointer; }
-  .legende, .com { padding:2px 12px; font-size:14px; line-height:1.4; }
+  .legende, .com { padding:2px 12px; font-size:14px; line-height:1.4; word-wrap:break-word; }
   .nouveau { display:flex; gap:8px; padding:10px 12px 12px; border-top:1px solid var(--gris); margin-top:8px; }
   .nouveau input { flex:1; padding:9px; border:1px solid var(--bord); border-radius:6px; }
   .nouveau button { background:none; border:none; color:#0095f6; font-weight:bold; cursor:pointer; }
@@ -133,9 +135,9 @@ try {
 <div id="auth">
   <button class="btnTheme petitTheme" type="button">🌙</button>
   <div class="logo">Photogram</div>
-  <input id="pseudo" type="text" placeholder="Pseudo (seulement pour s'inscrire)">
+  <input id="pseudo" type="text" maxlength="20" placeholder="Pseudo (seulement pour s'inscrire)">
   <input id="email" type="email" placeholder="Email">
-  <input id="mdp" type="password" placeholder="Mot de passe (6 caractères min.)">
+  <input id="mdp" type="password" placeholder="Mot de passe (8 caractères min.)">
   <button class="btn" id="btnConnecter">Se connecter</button>
   <button class="btn gris" id="btnInscrire">S'inscrire</button>
   <button id="btnOublie" type="button">Mot de passe oublié ?</button>
@@ -151,7 +153,7 @@ try {
   </header>
 
   <div id="barre">
-    <input id="recherche" type="search" placeholder="🔍 Rechercher une personne...">
+    <input id="recherche" type="search" maxlength="30" placeholder="🔍 Rechercher une personne...">
     <button class="btnTheme" type="button">🌙</button>
   </div>
 
@@ -159,7 +161,7 @@ try {
     <label class="fichier" for="photo">📷 Choisir une photo</label>
     <input id="photo" type="file" accept="image/*">
     <span id="etat"></span>
-    <input id="legende" type="text" placeholder="Écris une légende...">
+    <input id="legende" type="text" maxlength="300" placeholder="Écris une légende...">
     <button class="btn" id="btnPublier">Publier</button>
   </div>
 
@@ -209,6 +211,8 @@ let notifs = [];
 let profilActuel = null;
 let onglet = "tous";
 let recherche = "";
+let dernierePub = 0;
+let dernierCom = 0;
 
 // Mode sombre / clair
 function majTheme() {
@@ -284,6 +288,10 @@ $("btnInscrire").onclick = async () => {
   const pseudo = $("pseudo").value.trim();
   if (!/^[A-Za-z0-9_.-]{3,20}$/.test(pseudo)) {
     $("msg").textContent = "Pseudo : 3 à 20 caractères (lettres, chiffres, _ . -)";
+    return;
+  }
+  if ($("mdp").value.length < 8) {
+    $("msg").textContent = "Mot de passe : 8 caractères minimum";
     return;
   }
   $("msg").textContent = "";
@@ -378,6 +386,7 @@ onAuthStateChanged(auth, user => {
   }
 });
 
+// Réduit la photo pour qu'elle reste légère (moins de ~350 Ko)
 function reduirePhoto(fichier) {
   return new Promise((ok, erreur) => {
     const lecteur = new FileReader();
@@ -386,13 +395,21 @@ function reduirePhoto(fichier) {
       const img = new Image();
       img.onerror = erreur;
       img.onload = () => {
-        const max = 600;
-        const echelle = Math.min(1, max / Math.max(img.width, img.height));
-        const c = document.createElement("canvas");
-        c.width = img.width * echelle;
-        c.height = img.height * echelle;
-        c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
-        ok(c.toDataURL("image/jpeg", 0.6));
+        const essais = [[600, 0.6], [500, 0.5], [400, 0.45], [320, 0.4]];
+        let resultat = "";
+        for (let i = 0; i < essais.length; i++) {
+          const max = essais[i][0];
+          const q = essais[i][1];
+          const echelle = Math.min(1, max / Math.max(img.width, img.height));
+          const c = document.createElement("canvas");
+          c.width = Math.max(1, Math.round(img.width * echelle));
+          c.height = Math.max(1, Math.round(img.height * echelle));
+          c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+          resultat = c.toDataURL("image/jpeg", q);
+          if (resultat.length < 350000) break;
+        }
+        if (resultat.length >= 440000) erreur(new Error("photo trop grande"));
+        else ok(resultat);
       };
       img.src = lecteur.result;
     };
@@ -427,23 +444,38 @@ function reduireCarre(fichier, taille) {
 $("btnPublier").onclick = async () => {
   const fichier = $("photo").files[0];
   if (!fichier) { $("etat").textContent = "Choisis une photo d'abord"; return; }
+  if (!fichier.type.startsWith("image/")) {
+    $("etat").textContent = "Ce fichier n'est pas une image";
+    return;
+  }
+  if (fichier.size > 15 * 1024 * 1024) {
+    $("etat").textContent = "Photo trop lourde (15 Mo maximum)";
+    return;
+  }
+  if (Date.now() - dernierePub < 15000) {
+    $("etat").textContent = "Attends quelques secondes avant de republier";
+    return;
+  }
+  $("btnPublier").disabled = true;
   $("etat").textContent = "Publication...";
   try {
     const img = await reduirePhoto(fichier);
     await addDoc(collection(db, "posts"), {
       user: nomUtilisateur(),
-      texte: $("legende").value,
+      texte: $("legende").value.trim().slice(0, 300),
       img: img,
       likes: [],
       commentaires: [],
       date: serverTimestamp()
     });
+    dernierePub = Date.now();
     $("photo").value = "";
     $("legende").value = "";
     $("etat").textContent = "Publié ✅";
   } catch (e) {
-    $("etat").textContent = "Erreur : " + e.code;
+    $("etat").textContent = "Erreur : " + (e.code || e.message || "impossible");
   }
+  $("btnPublier").disabled = false;
 };
 
 function afficherFil() {
@@ -720,6 +752,10 @@ function rendreProfil() {
     champ.onchange = async () => {
       const f = champ.files[0];
       if (!f) return;
+      if (!f.type.startsWith("image/") || f.size > 15 * 1024 * 1024) {
+        info.textContent = "Image invalide ou trop lourde";
+        return;
+      }
       info.textContent = "Envoi...";
       try {
         const img = await reduireCarre(f, 200);
@@ -816,6 +852,27 @@ function carte(d) {
       }
     };
     ent.append(sup);
+  } else {
+    const sig = document.createElement("button");
+    sig.className = "suppr signaler";
+    sig.textContent = "🚩";
+    sig.title = "Signaler";
+    sig.onclick = async e => {
+      e.stopPropagation();
+      if (!confirm("Signaler cette publication ?")) return;
+      try {
+        await setDoc(doc(db, "signalements", d.id + "_" + uid), {
+          postId: d.id,
+          de: uid,
+          auteur: p.user,
+          date: serverTimestamp()
+        });
+        alert("Merci, la publication a été signalée.");
+      } catch (err) {
+        alert("Tu as déjà signalé cette publication, ou c'est impossible pour le moment.");
+      }
+    };
+    ent.append(sig);
   }
 
   const im = document.createElement("img");
@@ -828,7 +885,8 @@ function carte(d) {
   coeur.className = "coeur";
   coeur.textContent = aime ? "❤️" : "🤍";
   coeur.onclick = () => {
-    updateDoc(ref, { likes: aime ? arrayRemove(uid) : arrayUnion(uid) });
+    updateDoc(ref, { likes: aime ? arrayRemove(uid) : arrayUnion(uid) })
+      .catch(err => alert("Impossible : " + err.code));
     if (!aime) notifier(p.user, "like", { postId: d.id }, "like_" + d.id + "_" + uid);
   };
   const nb = document.createElement("span");
@@ -858,13 +916,18 @@ function carte(d) {
   nouveau.className = "nouveau";
   const champ = document.createElement("input");
   champ.type = "text";
+  champ.maxLength = 300;
   champ.placeholder = "Ajouter un commentaire...";
   const bouton = document.createElement("button");
   bouton.textContent = "Publier";
   bouton.onclick = () => {
-    const t = champ.value.trim();
+    const t = champ.value.trim().slice(0, 300);
     if (!t) return;
-    updateDoc(ref, { commentaires: arrayUnion({ user: nomUtilisateur(), texte: t }) });
+    if (Date.now() - dernierCom < 2000) return;
+    dernierCom = Date.now();
+    champ.value = "";
+    updateDoc(ref, { commentaires: arrayUnion({ user: nomUtilisateur(), texte: t }) })
+      .catch(err => alert("Impossible de commenter : " + err.code));
     notifier(p.user, "com", { postId: d.id, texte: t.slice(0, 60) });
   };
   nouveau.append(champ, bouton);
@@ -874,4 +937,4 @@ function carte(d) {
 }
 </script>
 </body>
- </html>
+    </html>
