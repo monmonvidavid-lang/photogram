@@ -27,7 +27,10 @@
          padding:10px 16px; font-weight:bold; font-size:14px; cursor:pointer; }
   .btn.gris { background:#efefef; color:#262626; }
   #auth .btn { width:100%; margin:6px 0 0; }
+  #btnOublie { background:none; border:none; color:#0095f6; font-size:13px;
+               margin-top:12px; cursor:pointer; }
   #msg { color:#ed4956; font-size:13px; min-height:18px; }
+  #msg.ok { color:#2e7d32; }
 
   #barre { max-width:500px; margin:12px auto 0; padding:0 12px; }
   #recherche { width:100%; padding:11px 14px; border:1px solid #dbdbdb; border-radius:20px;
@@ -108,6 +111,7 @@
   <input id="mdp" type="password" placeholder="Mot de passe (6 caractères min.)">
   <button class="btn" id="btnConnecter">Se connecter</button>
   <button class="btn gris" id="btnInscrire">S'inscrire</button>
+  <button id="btnOublie" type="button">Mot de passe oublié ?</button>
   <p id="msg"></p>
 </div>
 
@@ -148,7 +152,7 @@
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/13.1.0/firebase-app.js";
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword,
-         signOut, onAuthStateChanged, updateProfile }
+         signOut, onAuthStateChanged, updateProfile, sendPasswordResetEmail }
   from "https://www.gstatic.com/firebasejs/13.1.0/firebase-auth.js";
 import { getFirestore, collection, addDoc, query, orderBy, onSnapshot,
          serverTimestamp, doc, updateDoc, arrayUnion, arrayRemove, getDoc, setDoc, deleteDoc }
@@ -210,6 +214,7 @@ async function reserver(nom) {
 }
 
 $("btnInscrire").onclick = async () => {
+  $("msg").className = "";
   const pseudo = $("pseudo").value.trim();
   if (!/^[A-Za-z0-9_.-]{3,20}$/.test(pseudo)) {
     $("msg").textContent = "Pseudo : 3 à 20 caractères (lettres, chiffres, _ . -)";
@@ -237,9 +242,29 @@ $("btnInscrire").onclick = async () => {
   }
 };
 
-$("btnConnecter").onclick = () =>
+$("btnConnecter").onclick = () => {
+  $("msg").className = "";
   signInWithEmailAndPassword(auth, $("email").value, $("mdp").value)
     .catch(e => $("msg").textContent = e.code);
+};
+
+// Mot de passe oublié : envoie un email de réinitialisation
+$("btnOublie").onclick = async () => {
+  const email = $("email").value.trim();
+  if (!email) {
+    $("msg").className = "";
+    $("msg").textContent = "Écris ton email dans le champ Email, puis réessaie";
+    return;
+  }
+  try {
+    await sendPasswordResetEmail(auth, email);
+    $("msg").className = "ok";
+    $("msg").textContent = "Email envoyé ! Vérifie ta boîte de réception et tes spams.";
+  } catch (e) {
+    $("msg").className = "";
+    $("msg").textContent = e.code;
+  }
+};
 
 $("btnQuitter").onclick = () => signOut(auth);
 
