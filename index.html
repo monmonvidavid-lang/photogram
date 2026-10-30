@@ -29,6 +29,10 @@
   #auth .btn { width:100%; margin:6px 0 0; }
   #msg { color:#ed4956; font-size:13px; min-height:18px; }
 
+  #barre { max-width:500px; margin:12px auto 0; padding:0 12px; }
+  #recherche { width:100%; padding:11px 14px; border:1px solid #dbdbdb; border-radius:20px;
+               background:#efefef; font-size:14px; }
+
   #publier { max-width:500px; margin:14px auto; padding:14px; background:#fff;
              border:1px solid #dbdbdb; border-radius:10px; }
   #publier input[type=text] { width:100%; padding:10px; margin:10px 0;
@@ -42,6 +46,10 @@
   .ong { flex:1; padding:9px; border:none; border-radius:8px; background:#efefef;
          font-weight:bold; font-size:14px; cursor:pointer; color:#262626; }
   .ong.actif { background:#0095f6; color:#fff; }
+
+  .resultat { max-width:500px; margin:8px auto; padding:10px 12px; background:#fff;
+              border:1px solid #dbdbdb; border-radius:10px; display:flex;
+              align-items:center; gap:10px; cursor:pointer; }
 
   .post { background:#fff; max-width:500px; margin:14px auto;
           border:1px solid #dbdbdb; border-radius:10px; overflow:hidden; }
@@ -100,6 +108,10 @@
     <button id="btnQuitter">Quitter</button>
   </header>
 
+  <div id="barre">
+    <input id="recherche" type="search" placeholder="🔍 Rechercher une personne...">
+  </div>
+
   <div id="publier">
     <label class="fichier" for="photo">📷 Choisir une photo</label>
     <input id="photo" type="file" accept="image/*">
@@ -142,8 +154,10 @@ let arrets = [];
 let docs = [];
 let photos = {};
 let suivis = {};
+let pseudosListe = {};
 let profilActuel = null;
 let onglet = "tous";
+let recherche = "";
 
 function nomUtilisateur() {
   const u = auth.currentUser;
@@ -174,7 +188,7 @@ async function reserver(nom) {
   try {
     const ref = doc(db, "pseudos", nom.toLowerCase());
     const s = await getDoc(ref);
-    if (!s.exists()) await setDoc(ref, { uid: auth.currentUser.uid });
+    if (!s.exists()) await setDoc(ref, { uid: auth.currentUser.uid, nom: nom });
   } catch (e) {}
 }
 
@@ -194,7 +208,7 @@ $("btnInscrire").onclick = async () => {
     }
     const cred = await createUserWithEmailAndPassword(auth, $("email").value, $("mdp").value);
     try {
-      await setDoc(doc(db, "pseudos", cle), { uid: cred.user.uid });
+      await setDoc(doc(db, "pseudos", cle), { uid: cred.user.uid, nom: pseudo });
     } catch (e) {
       await cred.user.delete();
       $("msg").textContent = "Ce pseudo est déjà pris";
@@ -213,9 +227,16 @@ $("btnConnecter").onclick = () =>
 $("btnQuitter").onclick = () => signOut(auth);
 
 $("btnProfil").onclick = () => ouvrirProfil(nomUtilisateur());
-$("logo").onclick = () => { profilActuel = null; rendre(); window.scrollTo(0, 0); };
+$("logo").onclick = () => {
+  profilActuel = null;
+  recherche = "";
+  $("recherche").value = "";
+  rendre();
+  window.scrollTo(0, 0);
+};
 $("ongTous").onclick = () => { onglet = "tous"; rendre(); };
 $("ongAbos").onclick = () => { onglet = "abos"; rendre(); };
+$("recherche").oninput = () => { recherche = $("recherche").value; rendre(); };
 
 $("photo").onchange = () => {
   $("etat").textContent = $("photo").files[0] ? "Photo choisie ✅" : "";
@@ -228,9 +249,12 @@ onAuthStateChanged(auth, user => {
   arrets = [];
   profilActuel = null;
   onglet = "tous";
+  recherche = "";
+  $("recherche").value = "";
   docs = [];
   photos = {};
   suivis = {};
+  pseudosListe = {};
   if (user) {
     afficherFil();
     reserver(user.displayName || user.email.split("@")[0]);
@@ -321,10 +345,17 @@ function afficherFil() {
     snap.forEach(d => { suivis[d.id] = d.data().liste || []; });
     rendre();
   }, () => {}));
+  arrets.push(onSnapshot(collection(db, "pseudos"), snap => {
+    pseudosListe = {};
+    snap.forEach(d => { pseudosListe[d.id] = d.data().nom || d.id; });
+    rendre();
+  }, () => {}));
 }
 
 function ouvrirProfil(nom) {
   profilActuel = nom;
+  recherche = "";
+  $("recherche").value = "";
   rendre();
   window.scrollTo(0, 0);
 }
@@ -348,13 +379,59 @@ function pluriel(n, mot) {
   return n + " " + mot + (n > 1 ? "s" : "");
 }
 
+// Tous les pseudos connus (avec leurs majuscules quand c'est possible)
+function tousLesNoms() {
+  const carte = {};
+  Object.keys(pseudosListe).forEach(k => { carte[k] = pseudosListe[k]; });
+  docs.forEach(d => {
+    const u = d.data().user;
+    if (u) carte[u.toLowerCase()] = u;
+  });
+  carte[nomUtilisateur().toLowerCase()] = nomUtilisateur();
+  return Object.values(carte);
+}
+
+function rendreRecherche() {
+  const q = recherche.trim().toLowerCase();
+  const trouves = tousLesNoms()
+    .filter(n => n.toLowerCase().includes(q))
+    .sort((a, b) => {
+      const sa = a.toLowerCase().startsWith(q) ? 0 : 1;
+      const sb = b.toLowerCase().startsWith(q) ? 0 : 1;
+      return sa - sb || a.localeCompare(b);
+    })
+    .slice(0, 20);
+
+  if (trouves.length === 0) {
+    const v = document.createElement("div");
+    v.className = "vide";
+    v.textContent = "Aucune personne trouvée pour « " + recherche.trim() + " »";
+    $("fil").append(v);
+    return;
+  }
+
+  trouves.forEach(n => {
+    const ligne = document.createElement("div");
+    ligne.className = "resultat";
+    ligne.onclick = () => ouvrirProfil(n);
+    const nom = document.createElement("div");
+    nom.className = "nom";
+    nom.textContent = n;
+    ligne.append(avatar(n, false), nom);
+    $("fil").append(ligne);
+  });
+}
+
 function rendre() {
   $("fil").innerHTML = "";
-  $("publier").style.display = profilActuel ? "none" : "block";
-  $("onglets").style.display = profilActuel ? "none" : "flex";
+  const cherche = !profilActuel && recherche.trim() !== "";
+  $("barre").style.display = profilActuel ? "none" : "block";
+  $("publier").style.display = (profilActuel || cherche) ? "none" : "block";
+  $("onglets").style.display = (profilActuel || cherche) ? "none" : "flex";
   $("ongTous").className = "ong" + (onglet === "tous" ? " actif" : "");
   $("ongAbos").className = "ong" + (onglet === "abos" ? " actif" : "");
   if (profilActuel) { rendreProfil(); return; }
+  if (cherche) { rendreRecherche(); return; }
 
   let liste = docs;
   if (onglet === "abos") {
@@ -363,7 +440,7 @@ function rendre() {
     if (mesAbos.length === 0) {
       const v = document.createElement("div");
       v.className = "vide";
-      v.textContent = "Tu ne suis personne. Appuie sur le nom d'une personne, puis sur « S'abonner ».";
+      v.textContent = "Tu ne suis personne. Cherche une personne ou appuie sur son nom, puis sur « S'abonner ».";
       $("fil").append(v);
     }
     liste = docs.filter(d => {
@@ -562,4 +639,4 @@ function carte(d) {
 }
 </script>
 </body>
-     </html>
+   </html>
