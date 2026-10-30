@@ -4,111 +4,134 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Photogram</title>
+<script>
+try {
+  var t = localStorage.getItem("theme");
+  if (t === "sombre" || (t === null && window.matchMedia("(prefers-color-scheme: dark)").matches)) {
+    document.documentElement.classList.add("sombre");
+  }
+} catch (e) {}
+</script>
 <style>
+  :root {
+    --fond:#fafafa; --carte:#ffffff; --texte:#262626; --bord:#dbdbdb;
+    --gris:#efefef; --grisTexte:#737373; --champ:#fafafa; --bleuClair:#eef6ff;
+  }
+  :root.sombre {
+    --fond:#121212; --carte:#1e1e1e; --texte:#f0f0f0; --bord:#333333;
+    --gris:#2a2a2a; --grisTexte:#a3a3a3; --champ:#262626; --bleuClair:#1b2a3a;
+  }
   * { box-sizing:border-box; }
-  body { margin:0; font-family:Arial,sans-serif; background:#fafafa; color:#262626; }
+  body { margin:0; font-family:Arial,sans-serif; background:var(--fond); color:var(--texte); }
+  input { color:var(--texte); background:var(--champ); font-family:inherit; }
+  input::placeholder { color:var(--grisTexte); }
   .logo { font-family:"Brush Script MT","Segoe Script",cursive; font-size:30px;
           background:linear-gradient(45deg,#f09433,#dc2743,#bc1888);
           -webkit-background-clip:text; background-clip:text;
           -webkit-text-fill-color:transparent; color:transparent; }
-  header { background:#fff; padding:8px 12px; text-align:center;
-           border-bottom:1px solid #dbdbdb; position:sticky; top:0; z-index:5; }
+  header { background:var(--carte); padding:8px 12px; text-align:center;
+           border-bottom:1px solid var(--bord); position:sticky; top:0; z-index:5; }
   header .logo { font-size:28px; cursor:pointer; }
   header button { position:absolute; right:10px; top:14px; background:none; border:none;
                   color:#0095f6; font-weight:bold; font-size:14px; cursor:pointer; }
   header button#btnProfil { left:10px; right:auto; }
   header button#btnNotif { left:68px; right:auto; font-size:15px; }
 
-  #auth { max-width:340px; margin:40px auto; padding:28px 22px; background:#fff;
-          border:1px solid #dbdbdb; border-radius:10px; text-align:center; }
+  .btnTheme { width:40px; height:40px; border-radius:50%; border:none; background:var(--gris);
+              font-size:18px; cursor:pointer; flex-shrink:0; }
+  .petitTheme { position:absolute; top:10px; right:10px; }
+
+  #auth { position:relative; max-width:340px; margin:40px auto; padding:28px 22px;
+          background:var(--carte); border:1px solid var(--bord); border-radius:10px; text-align:center; }
   #auth .logo { font-size:44px; margin:0 0 16px; }
-  #auth input { width:100%; padding:11px; margin:5px 0; background:#fafafa;
-                border:1px solid #dbdbdb; border-radius:6px; font-size:14px; }
+  #auth input { width:100%; padding:11px; margin:5px 0;
+                border:1px solid var(--bord); border-radius:6px; font-size:14px; }
   .btn { background:#0095f6; color:#fff; border:none; border-radius:8px;
          padding:10px 16px; font-weight:bold; font-size:14px; cursor:pointer; }
-  .btn.gris { background:#efefef; color:#262626; }
+  .btn.gris { background:var(--gris); color:var(--texte); }
   #auth .btn { width:100%; margin:6px 0 0; }
   #btnOublie { background:none; border:none; color:#0095f6; font-size:13px;
                margin-top:12px; cursor:pointer; }
   #msg { color:#ed4956; font-size:13px; min-height:18px; }
   #msg.ok { color:#2e7d32; }
 
-  #barre { max-width:500px; margin:12px auto 0; padding:0 12px; }
-  #recherche { width:100%; padding:11px 14px; border:1px solid #dbdbdb; border-radius:20px;
-               background:#efefef; font-size:14px; }
+  #barre { max-width:500px; margin:12px auto 0; padding:0 12px; display:flex; gap:8px; align-items:center; }
+  #recherche { flex:1; min-width:0; padding:11px 14px; border:1px solid var(--bord); border-radius:20px;
+               background:var(--gris); font-size:14px; }
 
-  #publier { max-width:500px; margin:14px auto; padding:14px; background:#fff;
-             border:1px solid #dbdbdb; border-radius:10px; }
+  #publier { max-width:500px; margin:14px auto; padding:14px; background:var(--carte);
+             border:1px solid var(--bord); border-radius:10px; }
   #publier input[type=text] { width:100%; padding:10px; margin:10px 0;
-             border:1px solid #dbdbdb; border-radius:6px; font-size:14px; }
+             border:1px solid var(--bord); border-radius:6px; font-size:14px; }
   #photo { display:none; }
   .fichier { display:inline-block; padding:10px 14px; border-radius:8px;
-             background:#efefef; font-weight:bold; font-size:14px; cursor:pointer; }
+             background:var(--gris); font-weight:bold; font-size:14px; cursor:pointer; }
   #etat { font-size:13px; margin-left:8px; }
 
   #onglets { max-width:500px; margin:0 auto; padding:0 12px; display:flex; gap:8px; }
-  .ong { flex:1; padding:9px; border:none; border-radius:8px; background:#efefef;
-         font-weight:bold; font-size:14px; cursor:pointer; color:#262626; }
+  .ong { flex:1; padding:9px; border:none; border-radius:8px; background:var(--gris);
+         font-weight:bold; font-size:14px; cursor:pointer; color:var(--texte); }
   .ong.actif { background:#0095f6; color:#fff; }
 
-  .resultat { max-width:500px; margin:8px auto; padding:10px 12px; background:#fff;
-              border:1px solid #dbdbdb; border-radius:10px; display:flex;
+  .resultat { max-width:500px; margin:8px auto; padding:10px 12px; background:var(--carte);
+              border:1px solid var(--bord); border-radius:10px; display:flex;
               align-items:center; gap:10px; cursor:pointer; }
 
-  .post { background:#fff; max-width:500px; margin:14px auto;
-          border:1px solid #dbdbdb; border-radius:10px; overflow:hidden; }
+  .post { background:var(--carte); max-width:500px; margin:14px auto;
+          border:1px solid var(--bord); border-radius:10px; overflow:hidden; }
   .entete { display:flex; align-items:center; gap:10px; padding:10px 12px; cursor:pointer; }
   .avatar { width:34px; height:34px; border-radius:50%; color:#fff; font-weight:bold;
             display:flex; align-items:center; justify-content:center; flex-shrink:0;
             background:linear-gradient(45deg,#f09433,#dc2743,#bc1888); }
-  img.avatar { display:block; object-fit:cover; background:#efefef; }
+  img.avatar { display:block; object-fit:cover; background:var(--gris); }
   .avatar.grand { width:72px; height:72px; font-size:30px; }
   .nom { font-weight:bold; font-size:14px; }
-  .heure { font-size:12px; color:#737373; margin-top:2px; }
+  .heure { font-size:12px; color:var(--grisTexte); margin-top:2px; }
   .suppr { margin-left:auto; background:none; border:none; font-size:20px; cursor:pointer; padding:4px 6px; }
-  .post img.photo { width:100%; display:block; background:#efefef; }
+  .post img.photo { width:100%; display:block; background:var(--gris); }
   .actions { padding:10px 12px 4px; font-size:26px; }
   .coeur { cursor:pointer; }
   .nblikes { font-size:14px; font-weight:bold; margin-left:8px; cursor:pointer; }
   .legende, .com { padding:2px 12px; font-size:14px; line-height:1.4; }
-  .nouveau { display:flex; gap:8px; padding:10px 12px 12px; border-top:1px solid #efefef; margin-top:8px; }
-  .nouveau input { flex:1; padding:9px; border:1px solid #dbdbdb; border-radius:6px; }
+  .nouveau { display:flex; gap:8px; padding:10px 12px 12px; border-top:1px solid var(--gris); margin-top:8px; }
+  .nouveau input { flex:1; padding:9px; border:1px solid var(--bord); border-radius:6px; }
   .nouveau button { background:none; border:none; color:#0095f6; font-weight:bold; cursor:pointer; }
 
   .retour { max-width:500px; margin:10px auto 0; padding:0 12px; }
   .retour button { background:none; border:none; color:#0095f6; font-weight:bold;
                    font-size:14px; cursor:pointer; padding:6px 0; }
-  .profil-tete { max-width:500px; margin:8px auto 14px; padding:16px; background:#fff;
-                 border:1px solid #dbdbdb; border-radius:10px;
+  .profil-tete { max-width:500px; margin:8px auto 14px; padding:16px; background:var(--carte);
+                 border:1px solid var(--bord); border-radius:10px;
                  display:flex; align-items:center; gap:16px; }
   .profil-nom { font-size:18px; font-weight:bold; }
-  .profil-nb { font-size:13px; color:#737373; margin-top:4px; line-height:1.5; }
+  .profil-nb { font-size:13px; color:var(--grisTexte); margin-top:4px; line-height:1.5; }
   .profil-tete .btn { margin-top:8px; padding:8px 14px; }
   .change { display:inline-block; margin-top:8px; padding:7px 12px; border-radius:8px;
-            background:#efefef; font-weight:bold; font-size:13px; cursor:pointer; }
-  .petit { font-size:12px; color:#737373; margin-left:6px; }
+            background:var(--gris); font-weight:bold; font-size:13px; cursor:pointer; }
+  .petit { font-size:12px; color:var(--grisTexte); margin-left:6px; }
   .grille { max-width:500px; margin:0 auto 24px; display:grid;
             grid-template-columns:repeat(3,1fr); gap:3px; }
-  .grille img { width:100%; aspect-ratio:1/1; object-fit:cover; display:block; background:#efefef; }
-  .vide { text-align:center; color:#737373; padding:20px; font-size:14px; }
+  .grille img { width:100%; aspect-ratio:1/1; object-fit:cover; display:block; background:var(--gris); }
+  .vide { text-align:center; color:var(--grisTexte); padding:20px; font-size:14px; }
 
   #fenetre { position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,.5);
              z-index:20; display:none; align-items:center; justify-content:center; }
-  #boite { background:#fff; width:90%; max-width:400px; max-height:70vh; border-radius:12px;
-           overflow:hidden; display:flex; flex-direction:column; }
+  #boite { background:var(--carte); color:var(--texte); width:90%; max-width:400px; max-height:70vh;
+           border-radius:12px; overflow:hidden; display:flex; flex-direction:column; }
   #boiteTete { display:flex; justify-content:space-between; align-items:center;
-               padding:12px 14px; border-bottom:1px solid #dbdbdb; }
-  #boiteTete button { border:none; background:none; font-size:18px; cursor:pointer; }
+               padding:12px 14px; border-bottom:1px solid var(--bord); }
+  #boiteTete button { border:none; background:none; font-size:18px; cursor:pointer; color:var(--texte); }
   #boiteListe { overflow-y:auto; padding:6px 0; }
   .qui { display:flex; align-items:center; gap:10px; padding:8px 14px; cursor:pointer; }
-  .qui.nonlu { background:#eef6ff; }
+  .qui.nonlu { background:var(--bleuClair); }
   .qui .texte { font-size:14px; line-height:1.35; }
-  .qui .quand { font-size:12px; color:#737373; margin-top:2px; }
+  .qui .quand { font-size:12px; color:var(--grisTexte); margin-top:2px; }
 </style>
 </head>
 <body>
 
 <div id="auth">
+  <button class="btnTheme petitTheme" type="button">🌙</button>
   <div class="logo">Photogram</div>
   <input id="pseudo" type="text" placeholder="Pseudo (seulement pour s'inscrire)">
   <input id="email" type="email" placeholder="Email">
@@ -129,6 +152,7 @@
 
   <div id="barre">
     <input id="recherche" type="search" placeholder="🔍 Rechercher une personne...">
+    <button class="btnTheme" type="button">🌙</button>
   </div>
 
   <div id="publier">
@@ -185,6 +209,21 @@ let notifs = [];
 let profilActuel = null;
 let onglet = "tous";
 let recherche = "";
+
+// Mode sombre / clair
+function majTheme() {
+  const sombre = document.documentElement.classList.contains("sombre");
+  document.querySelectorAll(".btnTheme").forEach(b => {
+    b.textContent = sombre ? "☀️" : "🌙";
+  });
+}
+function basculerTheme() {
+  const sombre = document.documentElement.classList.toggle("sombre");
+  try { localStorage.setItem("theme", sombre ? "sombre" : "clair"); } catch (e) {}
+  majTheme();
+}
+document.querySelectorAll(".btnTheme").forEach(b => { b.onclick = basculerTheme; });
+majTheme();
 
 function nomUtilisateur() {
   const u = auth.currentUser;
@@ -612,7 +651,7 @@ function rendreRecherche() {
 function rendre() {
   $("fil").innerHTML = "";
   const cherche = !profilActuel && recherche.trim() !== "";
-  $("barre").style.display = profilActuel ? "none" : "block";
+  $("barre").style.display = profilActuel ? "none" : "flex";
   $("publier").style.display = (profilActuel || cherche) ? "none" : "block";
   $("onglets").style.display = (profilActuel || cherche) ? "none" : "flex";
   $("ongTous").className = "ong" + (onglet === "tous" ? " actif" : "");
