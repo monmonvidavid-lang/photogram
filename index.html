@@ -17,6 +17,7 @@
   header button { position:absolute; right:10px; top:14px; background:none; border:none;
                   color:#0095f6; font-weight:bold; font-size:14px; cursor:pointer; }
   header button#btnProfil { left:10px; right:auto; }
+  header button#btnNotif { left:68px; right:auto; font-size:15px; }
 
   #auth { max-width:340px; margin:40px auto; padding:28px 22px; background:#fff;
           border:1px solid #dbdbdb; border-radius:10px; text-align:center; }
@@ -100,6 +101,9 @@
   #boiteTete button { border:none; background:none; font-size:18px; cursor:pointer; }
   #boiteListe { overflow-y:auto; padding:6px 0; }
   .qui { display:flex; align-items:center; gap:10px; padding:8px 14px; cursor:pointer; }
+  .qui.nonlu { background:#eef6ff; }
+  .qui .texte { font-size:14px; line-height:1.35; }
+  .qui .quand { font-size:12px; color:#737373; margin-top:2px; }
 </style>
 </head>
 <body>
@@ -118,6 +122,7 @@
 <div id="app" style="display:none">
   <header>
     <button id="btnProfil">Profil</button>
+    <button id="btnNotif">🔔</button>
     <span class="logo" id="logo">Photogram</span>
     <button id="btnQuitter">Quitter</button>
   </header>
@@ -144,7 +149,7 @@
 
 <div id="fenetre">
   <div id="boite">
-    <div id="boiteTete"><b>Mentions J'aime</b><button id="fermer">✕</button></div>
+    <div id="boiteTete"><b id="boiteTitre">Mentions J'aime</b><button id="fermer">✕</button></div>
     <div id="boiteListe"></div>
   </div>
 </div>
@@ -154,7 +159,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/13.1.0/firebas
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword,
          signOut, onAuthStateChanged, updateProfile, sendPasswordResetEmail }
   from "https://www.gstatic.com/firebasejs/13.1.0/firebase-auth.js";
-import { getFirestore, collection, addDoc, query, orderBy, onSnapshot,
+import { getFirestore, collection, addDoc, query, orderBy, onSnapshot, where,
          serverTimestamp, doc, updateDoc, arrayUnion, arrayRemove, getDoc, setDoc, deleteDoc }
   from "https://www.gstatic.com/firebasejs/13.1.0/firebase-firestore.js";
 
@@ -176,6 +181,7 @@ let docs = [];
 let photos = {};
 let suivis = {};
 let pseudosListe = {};
+let notifs = [];
 let profilActuel = null;
 let onglet = "tous";
 let recherche = "";
@@ -210,6 +216,27 @@ async function reserver(nom) {
     const ref = doc(db, "pseudos", nom.toLowerCase());
     const s = await getDoc(ref);
     if (!s.exists()) await setDoc(ref, { uid: auth.currentUser.uid, nom: nom });
+  } catch (e) {}
+}
+
+// Envoie une notification à une personne (si on connaît son compte)
+function notifier(pourPseudo, type, extra, id) {
+  try {
+    const cible = pseudosListe[(pourPseudo || "").toLowerCase()];
+    if (!cible || !cible.uid || cible.uid === auth.currentUser.uid) return;
+    const data = Object.assign({
+      pourUid: cible.uid,
+      deUid: auth.currentUser.uid,
+      de: nomUtilisateur(),
+      type: type,
+      date: serverTimestamp(),
+      lu: false
+    }, extra || {});
+    if (id) {
+      setDoc(doc(db, "notifs", id), data).catch(() => {});
+    } else {
+      addDoc(collection(db, "notifs"), data).catch(() => {});
+    }
   } catch (e) {}
 }
 
@@ -269,6 +296,7 @@ $("btnOublie").onclick = async () => {
 $("btnQuitter").onclick = () => signOut(auth);
 
 $("btnProfil").onclick = () => ouvrirProfil(nomUtilisateur());
+$("btnNotif").onclick = () => voirNotifs();
 $("logo").onclick = () => {
   profilActuel = null;
   recherche = "";
@@ -303,6 +331,8 @@ onAuthStateChanged(auth, user => {
   photos = {};
   suivis = {};
   pseudosListe = {};
+  notifs = [];
+  majCloche();
   if (user) {
     afficherFil();
     reserver(user.displayName || user.email.split("@")[0]);
@@ -400,6 +430,72 @@ function afficherFil() {
     });
     rendre();
   }, () => {}));
+  const qn = query(collection(db, "notifs"), where("pourUid", "==", auth.currentUser.uid));
+  arrets.push(onSnapshot(qn, snap => {
+    notifs = snap.docs.map(d => Object.assign({ id: d.id }, d.data()));
+    majCloche();
+  }, () => {}));
+}
+
+// Cloche avec le nombre de notifications non lues
+function majCloche() {
+  const n = notifs.filter(x => !x.lu).length;
+  $("btnNotif").textContent = n > 0 ? "🔔 " + n : "🔔";
+  $("btnNotif").style.color = n > 0 ? "#ed4956" : "#0095f6";
+}
+
+function msNotif(n) {
+  return n.date && n.date.toMillis ? n.date.toMillis() : Date.now();
+}
+
+// Fenêtre des notifications
+function voirNotifs() {
+  $("boiteTitre").textContent = "Notifications";
+  const liste = $("boiteListe");
+  liste.innerHTML = "";
+
+  const triees = notifs.slice().sort((a, b) => msNotif(b) - msNotif(a)).slice(0, 30);
+
+  if (triees.length === 0) {
+    const v = document.createElement("div");
+    v.className = "vide";
+    v.textContent = "Aucune notification pour l'instant";
+    liste.append(v);
+  }
+
+  triees.forEach(n => {
+    const ligne = document.createElement("div");
+    ligne.className = "qui" + (n.lu ? "" : " nonlu");
+    ligne.onclick = () => {
+      $("fenetre").style.display = "none";
+      ouvrirProfil(n.de);
+    };
+
+    const corps = document.createElement("div");
+    const texte = document.createElement("div");
+    texte.className = "texte";
+    const nom = document.createElement("b");
+    nom.textContent = n.de + " ";
+    let action = "";
+    if (n.type === "like") action = "a aimé ta photo";
+    else if (n.type === "com") action = "a commenté : « " + (n.texte || "") + " »";
+    else if (n.type === "abo") action = "s'est abonné à toi";
+    texte.append(nom, document.createTextNode(action));
+    const quand = document.createElement("div");
+    quand.className = "quand";
+    quand.textContent = depuis(msNotif(n));
+    corps.append(texte, quand);
+
+    ligne.append(avatar(n.de, false), corps);
+    liste.append(ligne);
+  });
+
+  $("fenetre").style.display = "flex";
+
+  // Marque tout comme lu
+  notifs.filter(n => !n.lu).forEach(n => {
+    updateDoc(doc(db, "notifs", n.id), { lu: true }).catch(() => {});
+  });
 }
 
 function ouvrirProfil(nom) {
@@ -431,6 +527,7 @@ function pluriel(n, mot) {
 
 // Fenêtre « qui a aimé »
 function voirLikes(likes) {
+  $("boiteTitre").textContent = "Mentions J'aime";
   const liste = $("boiteListe");
   liste.innerHTML = "";
 
@@ -605,6 +702,11 @@ function rendreProfil() {
           uid: auth.currentUser.uid,
           liste: jeSuis ? arrayRemove(cle) : arrayUnion(cle)
         }, { merge: true });
+        if (!jeSuis) {
+          const cible = pseudosListe[cle];
+          const idNotif = "abo_" + auth.currentUser.uid + "_" + (cible ? cible.uid : "x");
+          notifier(profilActuel, "abo", {}, idNotif);
+        }
       } catch (e) {
         alert("Erreur : " + (e.code || "impossible"));
       }
@@ -686,8 +788,10 @@ function carte(d) {
   const coeur = document.createElement("span");
   coeur.className = "coeur";
   coeur.textContent = aime ? "❤️" : "🤍";
-  coeur.onclick = () =>
+  coeur.onclick = () => {
     updateDoc(ref, { likes: aime ? arrayRemove(uid) : arrayUnion(uid) });
+    if (!aime) notifier(p.user, "like", { postId: d.id }, "like_" + d.id + "_" + uid);
+  };
   const nb = document.createElement("span");
   nb.className = "nblikes";
   nb.textContent = likes.length + " j'aime";
@@ -722,6 +826,7 @@ function carte(d) {
     const t = champ.value.trim();
     if (!t) return;
     updateDoc(ref, { commentaires: arrayUnion({ user: nomUtilisateur(), texte: t }) });
+    notifier(p.user, "com", { postId: d.id, texte: t.slice(0, 60) });
   };
   nouveau.append(champ, bouton);
   div.append(nouveau);
